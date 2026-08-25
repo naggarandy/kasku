@@ -348,6 +348,10 @@
       <div class="auth-switch" id="authSwitch">
         Belum punya akun? <button type="button" id="authToggleMode">Daftar</button>
       </div>
+      <p class="help" id="authLocalHint" style="margin-top:14px;text-align:center"></p>
+      <div class="auth-switch" id="authRecover" style="display:none;margin-top:8px">
+        <button type="button" id="btnResetLocalAuth">Reset akun di browser ini</button>
+      </div>
     </div>
   </div>
 
@@ -571,10 +575,26 @@
     const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
 
     async function hashPassword(password, salt) {
-      const enc = new TextEncoder();
-      const data = enc.encode(salt + ":" + password);
-      const buf = await crypto.subtle.digest("SHA-256", data);
-      return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+      const payload = String(salt) + ":" + String(password);
+      try {
+        if (crypto && crypto.subtle && window.isSecureContext !== false) {
+          const enc = new TextEncoder();
+          const buf = await crypto.subtle.digest("SHA-256", enc.encode(payload));
+          return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+        }
+      } catch { /* fallback di bawah */ }
+      // Fallback untuk konteks non-secure / browser lama (bukan kriptografi kuat)
+      let h = 2166136261;
+      for (let i = 0; i < payload.length; i++) {
+        h ^= payload.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      let out = (h >>> 0).toString(16).padStart(8, "0");
+      for (let r = 0; r < 7; r++) {
+        h = Math.imul(h ^ (h >>> 13), 1274126177);
+        out += (h >>> 0).toString(16).padStart(8, "0");
+      }
+      return out.slice(0, 64);
     }
     function loadAuth() {
       try {
@@ -589,12 +609,20 @@
     function saveAuth(auth) {
       localStorage.setItem(AUTH_STORE, JSON.stringify(auth));
     }
+    function listLocalUsernames() {
+      return Object.keys(loadAuth().users).sort();
+    }
     function getSessionUser() {
-      return sessionStorage.getItem(SESSION_KEY) || "";
+      return localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY) || "";
     }
     function setSessionUser(username) {
-      if (username) sessionStorage.setItem(SESSION_KEY, username);
-      else sessionStorage.removeItem(SESSION_KEY);
+      if (username) {
+        localStorage.setItem(SESSION_KEY, username);
+        sessionStorage.setItem(SESSION_KEY, username);
+      } else {
+        localStorage.removeItem(SESSION_KEY);
+        sessionStorage.removeItem(SESSION_KEY);
+      }
     }
     function storeKeyFor(username) {
       return STORE + ":" + username.toLowerCase();
@@ -700,14 +728,27 @@
       $("authError").classList.remove("show");
       $("authError").textContent = "";
     }
+    function updateAuthHints() {
+      const names = listLocalUsernames();
+      const hint = $("authLocalHint");
+      const recover = $("authRecover");
+      if (!hint) return;
+      if (names.length === 0) {
+        hint.textContent = "Belum ada akun di browser ini. Silakan daftar. Akun tidak ikut pindah antar situs (GitHub ≠ Cloudflare ≠ file lokal).";
+        if (recover) recover.style.display = "none";
+      } else {
+        hint.textContent = "Akun di browser ini: " + names.map((n) => "@" + n).join(", ");
+        if (recover) recover.style.display = "block";
+      }
+    }
     function setAuthMode(mode) {
       authMode = mode;
       clearAuthError();
       const isReg = mode === "register";
       $("authTitle").textContent = isReg ? "Daftar KasKu" : "Masuk ke KasKu";
       $("authLead").textContent = isReg
-        ? "Buat akun di perangkat ini. Setiap pengguna punya buku kas sendiri."
-        : "Masukkan nama pengguna dan kata sandi untuk membuka buku kas.";
+        ? "Buat akun di browser/perangkat ini. Data tersimpan lokal, bukan di cloud."
+        : "Masuk dengan akun yang dibuat di browser yang sama (URL yang sama).";
       $("authPass2Field").style.display = isReg ? "block" : "none";
       $("authPass2").required = isReg;
       $("authPass").autocomplete = isReg ? "new-password" : "current-password";
@@ -716,6 +757,7 @@
         ? 'Sudah punya akun? <button type="button" id="authToggleMode">Masuk</button>'
         : 'Belum punya akun? <button type="button" id="authToggleMode">Daftar</button>';
       $("authToggleMode").onclick = () => setAuthMode(isReg ? "login" : "register");
+      updateAuthHints();
     }
     function enterApp(username) {
       currentUser = username;
@@ -1231,21 +1273,44 @@
       if (authMode === "register") {
         const pass2 = $("authPass2").value || "";
         if (pass !== pass2) return showAuthError("Ulangan kata sandi tidak cocok.");
-        if (auth.users[username]) return showAuthError("Nama pengguna sudah dipakai.");
-        const salt = newId();
-        const hash = await hashPassword(pass, salt);
-        auth.users[username] = { salt, hash, createdAt: new Date().toISOString() };
-        saveAuth(auth);
-        toast("Akun dibuat. Selamat datang!");
-        enterApp(username);
+        if (auth.users[username]) return showAuthError("Nama pengguna sudah dipakai di browser ini. Silakan masuk.");
+        try {
+          const salt = newId();
+          const hash = await hashPassword(pass, salt);
+          auth.users[username] = { salt, hash, createdAt: new Date().toISOString() };
+          saveAuth(auth);
+          toast("Akun dibuat. Selamat datang!");
+          enterApp(username);
+        } catch (err) {
+          showAuthError("Gagal membuat akun. Coba lagi di HTTPS (GitHub/Cloudflare), bukan file lokal.");
+        }
         return;
       }
+      const names = Object.keys(auth.users);
+      if (names.length === 0) {
+        return showAuthError("Belum ada akun di browser ini. Klik Daftar. Akun di situs/file lain tidak ikut terbawa.");
+      }
       const user = auth.users[username];
-      if (!user) return showAuthError("Nama pengguna atau kata sandi salah.");
-      const hash = await hashPassword(pass, user.salt);
-      if (hash !== user.hash) return showAuthError("Nama pengguna atau kata sandi salah.");
-      enterApp(username);
+      if (!user) {
+        return showAuthError("Akun @" + username + " tidak ada di browser ini. Ada: " + names.map((n) => "@" + n).join(", ") + ". Atau daftar baru.");
+      }
+      try {
+        const hash = await hashPassword(pass, user.salt);
+        if (hash !== user.hash) return showAuthError("Kata sandi salah untuk @" + username + ".");
+        enterApp(username);
+      } catch (err) {
+        showAuthError("Gagal memverifikasi sandi. Buka lewat HTTPS (bukan file HTML lokal).");
+      }
     };
+    if ($("btnResetLocalAuth")) {
+      $("btnResetLocalAuth").onclick = () => {
+        if (!confirm("Hapus SEMUA akun login di browser ini? Data transaksi per akun tetap ada di penyimpanan, tapi Anda harus daftar ulang dengan nama yang sama untuk mengaksesnya.")) return;
+        localStorage.removeItem(AUTH_STORE);
+        setSessionUser("");
+        toast("Akun login di-reset. Silakan daftar lagi (pakai nama yang sama agar data transaksi lama terbaca).");
+        setAuthMode("register");
+      };
+    }
 
     $("btnLogout").onclick = () => {
       $("menu").classList.remove("show");
@@ -1282,19 +1347,22 @@
       toast("Kata sandi diperbarui.");
     };
 
-    // Init: sesi tab masih ada → langsung masuk; jika belum ada akun → mode daftar
+    // Init: sesi masih ada → langsung masuk; jika belum ada akun → mode daftar
     (function initAuth() {
       const auth = loadAuth();
       const users = Object.keys(auth.users);
       if (users.length === 0) setAuthMode("register");
       else setAuthMode("login");
+      updateAuthHints();
       const sess = getSessionUser();
       if (sess && auth.users[sess]) {
         enterApp(sess);
       } else {
         $("authScreen").classList.remove("hidden");
         $("appShell").classList.remove("ready");
-        setTimeout(() => $("authUser").focus(), 50);
+        if (sess && !auth.users[sess]) setSessionUser("");
+        if (users.length === 1) $("authUser").value = users[0];
+        setTimeout(() => ($("authPass").value ? $("authSubmit") : $("authUser")).focus(), 50);
       }
     })();
   </script>
