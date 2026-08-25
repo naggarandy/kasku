@@ -307,6 +307,61 @@
       min-width: 6.5rem; text-align: right; flex-shrink: 0;
     }
     .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+    /* Budget */
+    .budget-card { margin-top: 24px; }
+    .budget-summary {
+      display: grid; gap: 8px; margin-bottom: 14px;
+      padding: 12px 14px; border-radius: 12px; background: var(--muted-bg);
+    }
+    .budget-summary .bs-row {
+      display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+      font-size: 0.9rem;
+    }
+    .budget-summary .bs-row strong { font-variant-numeric: tabular-nums; }
+    .budget-summary .bs-bar {
+      height: 10px; background: #e0d7c8; border-radius: 999px; overflow: hidden; margin-top: 4px;
+    }
+    .budget-summary .bs-fill {
+      height: 100%; border-radius: 999px; background: var(--primary);
+      transition: width 200ms ease;
+    }
+    .budget-summary .bs-fill.over { background: var(--expense); }
+    .budget-summary .bs-fill.warn { background: #c47f17; }
+    .budget-list { display: flex; flex-direction: column; gap: 12px; }
+    .budget-item {
+      display: grid; gap: 6px;
+      padding-bottom: 12px; border-bottom: 1px solid var(--border);
+    }
+    .budget-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .budget-item .bi-top {
+      display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+      font-size: 0.9rem;
+    }
+    .budget-item .bi-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .budget-item .bi-amt { font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+    .budget-item .bi-amt.over { color: var(--expense); font-weight: 600; }
+    .budget-item .bi-track {
+      height: 8px; background: var(--muted-bg); border-radius: 999px; overflow: hidden;
+    }
+    .budget-item .bi-fill {
+      height: 100%; border-radius: 999px; background: var(--income);
+      transition: width 200ms ease;
+    }
+    .budget-item .bi-fill.warn { background: #c47f17; }
+    .budget-item .bi-fill.over { background: var(--expense); }
+    .budget-form-row {
+      display: grid; grid-template-columns: 1fr 8rem auto; gap: 8px; align-items: end; margin-top: 12px;
+    }
+    @media (max-width: 480px) {
+      .budget-form-row { grid-template-columns: 1fr; }
+    }
+    .budget-edit-list { max-height: 280px; overflow: auto; margin-top: 12px; border: 1px solid var(--border); border-radius: 16px; }
+    .budget-edit-list li {
+      display: grid; grid-template-columns: 1fr 7.5rem auto; gap: 8px; align-items: center;
+      padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.9rem;
+    }
+    .budget-edit-list li:last-child { border-bottom: none; }
+    .budget-edit-list input { height: 36px; padding: 6px 10px; font-size: 0.85rem; }
     .overlay {
       display: none; position: fixed; inset: 0; background: rgb(28 25 21 / 0.4);
       z-index: 80; align-items: center; justify-content: center; padding: 16px;
@@ -471,6 +526,7 @@
           <button type="button" id="btnImport">Impor CSV / JSON</button>
           <div class="sep"></div>
           <button type="button" id="btnCats">Kelola kategori</button>
+          <button type="button" id="btnBudget">Kelola anggaran</button>
           <button type="button" id="btnSample">Muat data contoh</button>
           <button type="button" class="danger" id="btnClear">Hapus semua data</button>
           <div class="sep"></div>
@@ -519,6 +575,17 @@
         <ul class="list" id="list"></ul>
       </section>
     </div>
+
+    <section class="card budget-card">
+      <div class="card-head">
+        <div>
+          <h2>Anggaran</h2>
+          <p class="sub" id="budgetSub">Batas pengeluaran bulanan per kategori</p>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" id="btnBudgetOpen">Atur</button>
+      </div>
+      <div id="budgetPanel"></div>
+    </section>
   </main>
 
   <div class="overlay" id="txModal" role="dialog" aria-modal="true">
@@ -597,6 +664,35 @@
 
   <input type="file" id="fileInput" accept=".csv,.json,text/csv,application/json" hidden />
   <div class="toast" id="toast"></div>
+
+  <!-- Modal anggaran -->
+  <div class="overlay" id="budgetModal" role="dialog" aria-modal="true">
+    <div class="modal wide">
+      <button class="close-x" type="button" data-close="budgetModal" aria-label="Tutup">✕</button>
+      <h3>Kelola anggaran</h3>
+      <p class="desc">Tetapkan batas pengeluaran bulanan per kategori. Berlaku untuk setiap bulan (bukan sekali saja).</p>
+      <div class="field">
+        <label for="budgetTotal">Anggaran total bulanan (opsional)</label>
+        <input id="budgetTotal" inputmode="numeric" placeholder="Contoh: 5000000" />
+        <p class="help">Kosongkan jika hanya memakai batas per kategori.</p>
+      </div>
+      <form id="budgetAddForm" class="budget-form-row">
+        <div class="field" style="margin:0">
+          <label for="budgetCat">Kategori</label>
+          <select id="budgetCat"></select>
+        </div>
+        <div class="field" style="margin:0">
+          <label for="budgetAmt">Batas (Rp)</label>
+          <input id="budgetAmt" inputmode="numeric" placeholder="1000000" required />
+        </div>
+        <button type="submit" class="btn btn-primary">Simpan</button>
+      </form>
+      <ul class="budget-edit-list" id="budgetEditList"></ul>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" data-close="budgetModal">Tutup</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal ubah kata sandi -->
   <div class="overlay" id="passModal" role="dialog" aria-modal="true">
@@ -757,7 +853,13 @@
       ];
     }
 
-    let state = { transactions: [], customCategories: { pemasukan: [], pengeluaran: [] }, hasSeeded: false };
+    let state = {
+      transactions: [],
+      customCategories: { pemasukan: [], pengeluaran: [] },
+      budgets: {},
+      budgetTotal: 0,
+      hasSeeded: false
+    };
     let month = currentMonthKey();
     let search = "";
     let listType = "all";
@@ -782,10 +884,14 @@
           const p = JSON.parse(raw);
           state.transactions = Array.isArray(p.transactions) ? p.transactions : [];
           state.customCategories = p.customCategories || { pemasukan: [], pengeluaran: [] };
+          state.budgets = p.budgets && typeof p.budgets === "object" ? p.budgets : {};
+          state.budgetTotal = Number(p.budgetTotal) > 0 ? Number(p.budgetTotal) : 0;
           state.hasSeeded = Boolean(p.hasSeeded);
         } else {
           state.transactions = [];
           state.customCategories = { pemasukan: [], pengeluaran: [] };
+          state.budgets = {};
+          state.budgetTotal = 0;
           state.hasSeeded = false;
         }
       } catch { /* ignore */ }
@@ -800,8 +906,23 @@
       localStorage.setItem(storeKeyFor(currentUser), JSON.stringify({
         transactions: state.transactions,
         customCategories: state.customCategories,
+        budgets: state.budgets || {},
+        budgetTotal: Number(state.budgetTotal) > 0 ? Number(state.budgetTotal) : 0,
         hasSeeded: true
       }));
+    }
+
+    function spentByCategory(rows) {
+      const map = new Map();
+      for (const t of rows) {
+        if (t.type !== "pengeluaran") continue;
+        map.set(t.category, (map.get(t.category) || 0) + t.amount);
+      }
+      return map;
+    }
+    function parseBudgetAmount(raw) {
+      const n = Number(String(raw || "").replace(/\D/g, ""));
+      return Number.isFinite(n) ? n : 0;
     }
 
     function showAuthError(msg) {
@@ -850,7 +971,7 @@
       $("authScreen").classList.add("hidden");
       $("appShell").classList.add("ready");
       $("userChip").textContent = "@" + username;
-      state = { transactions: [], customCategories: { pemasukan: [], pengeluaran: [] }, hasSeeded: false };
+      state = { transactions: [], customCategories: { pemasukan: [], pengeluaran: [] }, budgets: {}, budgetTotal: 0, hasSeeded: false };
       load();
       month = currentMonthKey();
       render();
@@ -858,7 +979,7 @@
     function lockApp() {
       currentUser = "";
       setSessionUser("");
-      state = { transactions: [], customCategories: { pemasukan: [], pengeluaran: [] }, hasSeeded: false };
+      state = { transactions: [], customCategories: { pemasukan: [], pengeluaran: [] }, budgets: {}, budgetTotal: 0, hasSeeded: false };
       $("appShell").classList.remove("ready");
       $("authScreen").classList.remove("hidden");
       $("authPass").value = "";
@@ -992,11 +1113,103 @@
       }).join("");
     }
 
+    function renderBudget() {
+      const panel = $("budgetPanel");
+      const sub = $("budgetSub");
+      if (!panel) return;
+      const rows = month === "all" ? state.transactions.filter((t) => monthKey(t.date) === currentMonthKey()) : monthRows();
+      const periodLabel = month === "all" ? formatMonthLabel(currentMonthKey()) + " (saat filter Semua)" : formatMonthLabel(month);
+      if (sub) sub.textContent = "Pengeluaran vs batas · " + periodLabel;
+
+      const spentMap = spentByCategory(rows);
+      const budgetEntries = Object.entries(state.budgets || {})
+        .filter(([, v]) => Number(v) > 0)
+        .map(([cat, limit]) => ({ cat, limit: Number(limit), spent: spentMap.get(cat) || 0 }))
+        .sort((a, b) => (b.spent / b.limit) - (a.spent / a.limit));
+
+      const totalLimit = Number(state.budgetTotal) > 0
+        ? Number(state.budgetTotal)
+        : budgetEntries.reduce((s, b) => s + b.limit, 0);
+      const totalSpent = budgetEntries.length
+        ? budgetEntries.reduce((s, b) => s + b.spent, 0)
+        : totals(rows).expense;
+      const useTotal = Number(state.budgetTotal) > 0 || budgetEntries.length > 0;
+
+      if (!useTotal && !budgetEntries.length) {
+        panel.innerHTML = `<div class="empty"><strong>Belum ada anggaran</strong>Atur batas pengeluaran bulanan per kategori agar pengeluaran lebih terkontrol.<br><button type="button" class="btn btn-primary" style="margin-top:12px" id="budgetEmptyBtn">Atur anggaran</button></div>`;
+        const b = $("budgetEmptyBtn");
+        if (b) b.onclick = openBudgetModal;
+        return;
+      }
+
+      const pctTotal = totalLimit > 0 ? Math.min(999, Math.round((totalSpent / totalLimit) * 100)) : 0;
+      const fillPct = totalLimit > 0 ? Math.min(100, (totalSpent / totalLimit) * 100) : 0;
+      const totalClass = pctTotal >= 100 ? "over" : pctTotal >= 80 ? "warn" : "";
+
+      let html = `<div class="budget-summary">
+        <div class="bs-row"><span>Terpakai</span><strong>${formatRupiah(totalSpent)} / ${totalLimit > 0 ? formatRupiah(totalLimit) : "—"}</strong></div>
+        <div class="bs-bar"><div class="bs-fill ${totalClass}" style="width:${fillPct}%"></div></div>
+        <div class="bs-row"><span style="color:var(--muted);font-size:0.8rem">${pctTotal}% dari anggaran${Number(state.budgetTotal) > 0 ? " total" : " kategori"}</span>
+          <span style="color:${pctTotal >= 100 ? "var(--expense)" : "var(--muted)"};font-size:0.8rem">${pctTotal >= 100 ? "Melebihi batas" : pctTotal >= 80 ? "Mendekati batas" : "Masih aman"}</span>
+        </div>
+      </div>`;
+
+      if (budgetEntries.length) {
+        html += `<div class="budget-list">` + budgetEntries.map((b) => {
+          const pct = b.limit > 0 ? Math.round((b.spent / b.limit) * 100) : 0;
+          const w = b.limit > 0 ? Math.min(100, (b.spent / b.limit) * 100) : 0;
+          const cls = pct >= 100 ? "over" : pct >= 80 ? "warn" : "";
+          return `<div class="budget-item">
+            <div class="bi-top">
+              <span class="bi-name">${escapeHtml(b.cat)}</span>
+              <span class="bi-amt ${cls}">${formatRupiah(b.spent)} / ${formatRupiah(b.limit)} · ${pct}%</span>
+            </div>
+            <div class="bi-track"><div class="bi-fill ${cls}" style="width:${w}%"></div></div>
+          </div>`;
+        }).join("") + `</div>`;
+      } else {
+        html += `<p class="help" style="margin-top:8px">Hanya anggaran total yang diset. Tambah batas per kategori untuk detail.</p>`;
+      }
+      panel.innerHTML = html;
+    }
+
+    function fillBudgetCatSelect() {
+      const cats = mergeCategories("pengeluaran", state.customCategories);
+      const sel = $("budgetCat");
+      if (!sel) return;
+      sel.innerHTML = cats.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+    }
+    function renderBudgetEditList() {
+      const ul = $("budgetEditList");
+      if (!ul) return;
+      const entries = Object.entries(state.budgets || {}).filter(([, v]) => Number(v) > 0)
+        .sort((a, b) => a[0].localeCompare(b[0], "id"));
+      if (!entries.length) {
+        ul.innerHTML = `<li style="display:block;color:var(--muted)">Belum ada batas per kategori.</li>`;
+        return;
+      }
+      ul.innerHTML = entries.map(([cat, limit]) => `
+        <li>
+          <span class="grow" style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(cat)}</span>
+          <input type="text" inputmode="numeric" data-bedit="${escapeHtml(cat)}" value="${Number(limit)}" aria-label="Batas ${escapeHtml(cat)}" />
+          <button type="button" class="btn btn-ghost btn-icon btn-sm" data-bdel="${escapeHtml(cat)}" aria-label="Hapus" style="color:var(--expense)">✕</button>
+        </li>
+      `).join("");
+    }
+    function openBudgetModal() {
+      $("budgetTotal").value = state.budgetTotal > 0 ? String(state.budgetTotal) : "";
+      $("budgetAmt").value = "";
+      fillBudgetCatSelect();
+      renderBudgetEditList();
+      openModal("budgetModal");
+    }
+
     function render() {
       renderMonthOptions();
       renderSummary();
       renderChart();
       renderList();
+      renderBudget();
     }
 
     function fillCategories(selected) {
@@ -1185,11 +1398,11 @@
     document.querySelectorAll("[data-close]").forEach((b) => {
       b.onclick = () => closeModal(b.dataset.close);
     });
-    ["txModal", "catModal", "confirmModal", "passModal"].forEach((id) => {
+    ["txModal", "catModal", "confirmModal", "passModal", "budgetModal"].forEach((id) => {
       $(id).addEventListener("click", (e) => { if (e.target === $(id)) closeModal(id); });
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") ["txModal", "catModal", "confirmModal", "passModal"].forEach(closeModal);
+      if (e.key === "Escape") ["txModal", "catModal", "confirmModal", "passModal", "budgetModal"].forEach(closeModal);
     });
 
     $("typeOut").onclick = () => setFormType("pengeluaran");
@@ -1234,6 +1447,51 @@
     };
 
     $("btnCats").onclick = () => { $("menu").classList.remove("show"); catManageType = "pengeluaran"; $("catTypeOut").classList.add("on"); $("catTypeIn").classList.remove("on"); renderCatList(); openModal("catModal"); };
+    $("btnBudget").onclick = () => { $("menu").classList.remove("show"); openBudgetModal(); };
+    $("btnBudgetOpen").onclick = () => openBudgetModal();
+    $("budgetAddForm").onsubmit = (e) => {
+      e.preventDefault();
+      const cat = ($("budgetCat").value || "").trim();
+      const amt = parseBudgetAmount($("budgetAmt").value);
+      if (!cat) return toast("Pilih kategori.");
+      if (amt <= 0) return toast("Masukkan batas anggaran yang valid.");
+      state.budgets = state.budgets || {};
+      state.budgets[cat] = amt;
+      save();
+      $("budgetAmt").value = "";
+      renderBudgetEditList();
+      renderBudget();
+      toast("Anggaran " + cat + " disimpan.");
+    };
+    $("budgetTotal").onchange = () => {
+      state.budgetTotal = parseBudgetAmount($("budgetTotal").value);
+      save();
+      renderBudget();
+      toast(state.budgetTotal > 0 ? "Anggaran total disimpan." : "Anggaran total dihapus.");
+    };
+    $("budgetEditList").onclick = (e) => {
+      const del = e.target.closest("[data-bdel]");
+      if (!del) return;
+      const cat = del.getAttribute("data-bdel");
+      delete state.budgets[cat];
+      save();
+      renderBudgetEditList();
+      renderBudget();
+      toast("Anggaran dihapus.");
+    };
+    $("budgetEditList").onchange = (e) => {
+      const inp = e.target.closest("[data-bedit]");
+      if (!inp) return;
+      const cat = inp.getAttribute("data-bedit");
+      const amt = parseBudgetAmount(inp.value);
+      if (amt <= 0) {
+        delete state.budgets[cat];
+      } else {
+        state.budgets[cat] = amt;
+      }
+      save();
+      renderBudget();
+    };
     $("catTypeOut").onclick = () => { catManageType = "pengeluaran"; $("catTypeOut").classList.add("on"); $("catTypeIn").classList.remove("on"); renderCatList(); };
     $("catTypeIn").onclick = () => { catManageType = "pemasukan"; $("catTypeIn").classList.add("on"); $("catTypeOut").classList.remove("on"); renderCatList(); };
     $("catAddForm").onsubmit = (e) => {
@@ -1264,6 +1522,10 @@
         if (clash) return toast("Nama itu sudah dipakai.");
         state.customCategories[catManageType] = (state.customCategories[catManageType] || []).map((c) => c.toLowerCase() === from.toLowerCase() ? trimmed : c);
         state.transactions = state.transactions.map((t) => t.type === catManageType && t.category.toLowerCase() === from.toLowerCase() ? { ...t, category: trimmed } : t);
+        if (state.budgets && state.budgets[from] != null) {
+          state.budgets[trimmed] = state.budgets[from];
+          delete state.budgets[from];
+        }
         save(); renderCatList(); render(); toast("Kategori diubah.");
       }
     });
@@ -1278,7 +1540,13 @@
     };
     $("btnExportJson").onclick = () => {
       $("menu").classList.remove("show");
-      download(`kasku_cadangan_${todayKey()}.json`, JSON.stringify({ version: 1, app: "kasku", exportedAt: new Date().toISOString(), transactions: state.transactions, customCategories: state.customCategories }, null, 2), "application/json");
+      download(`kasku_cadangan_${todayKey()}.json`, JSON.stringify({
+        version: 1, app: "kasku", exportedAt: new Date().toISOString(),
+        transactions: state.transactions,
+        customCategories: state.customCategories,
+        budgets: state.budgets || {},
+        budgetTotal: state.budgetTotal || 0
+      }, null, 2), "application/json");
       toast("Cadangan JSON diunduh.");
     };
     $("btnImport").onclick = () => { $("menu").classList.remove("show"); $("fileInput").click(); };
@@ -1288,17 +1556,19 @@
       if (!file) return;
       const text = await file.text();
       try {
-        let txs = [], cats;
+        let txs = [], cats, budgets, budgetTotal;
         if (file.name.toLowerCase().endsWith(".json") || text.trim().startsWith("{")) {
           const p = JSON.parse(text);
           txs = Array.isArray(p.transactions) ? p.transactions : [];
           cats = p.customCategories;
+          budgets = p.budgets;
+          budgetTotal = p.budgetTotal;
           if (!txs.length) return toast("File JSON tidak berisi transaksi.");
         } else {
           txs = parseCsv(text);
           if (!txs.length) return toast("CSV tidak berisi transaksi yang bisa dibaca.");
         }
-        pendingImport = { txs, cats };
+        pendingImport = { txs, cats, budgets, budgetTotal };
         askConfirm(`Impor ${txs.length} transaksi?`, "Gabungkan menambahkan ke data sekarang. Ganti semua menimpa seluruh buku kas.", false, () => {
           /* default: merge via extra buttons — handled below as merge */
           const ids = new Set(state.transactions.map((t) => t.id));
@@ -1310,6 +1580,10 @@
               state.customCategories[type] = merged.filter((c) => !DEFAULT_CATEGORIES[type].some((d) => d.toLowerCase() === c.toLowerCase()));
             }
           }
+          if (pendingImport.budgets && typeof pendingImport.budgets === "object") {
+            state.budgets = { ...(state.budgets || {}), ...pendingImport.budgets };
+          }
+          if (Number(pendingImport.budgetTotal) > 0) state.budgetTotal = Number(pendingImport.budgetTotal);
           state.hasSeeded = true; save(); render(); toast("Data digabungkan.");
         });
         $("confirmOk").textContent = "Gabungkan";
@@ -1323,14 +1597,24 @@
       askConfirm("Muat data contoh?", "Data contoh akan mengganti seluruh transaksi yang ada sekarang.", false, () => {
         state.transactions = buildSeed();
         state.customCategories = { pemasukan: [], pengeluaran: [] };
+        state.budgets = {
+          Makanan: 1500000,
+          Transportasi: 500000,
+          Bensin: 400000,
+          Internet: 400000,
+          Hiburan: 300000
+        };
+        state.budgetTotal = 5000000;
         state.hasSeeded = true; save(); month = currentMonthKey(); render(); toast("Data contoh dimuat.");
       });
     };
     $("btnClear").onclick = () => {
       $("menu").classList.remove("show");
-      askConfirm("Hapus semua data?", "Semua transaksi dan kategori custom di perangkat ini akan dihapus. Tidak bisa dibatalkan.", true, () => {
+      askConfirm("Hapus semua data?", "Semua transaksi, kategori custom, dan anggaran di perangkat ini akan dihapus. Tidak bisa dibatalkan.", true, () => {
         state.transactions = [];
         state.customCategories = { pemasukan: [], pengeluaran: [] };
+        state.budgets = {};
+        state.budgetTotal = 0;
         state.hasSeeded = true; save(); month = currentMonthKey(); render(); toast("Buku kas dikosongkan.");
       });
     };
